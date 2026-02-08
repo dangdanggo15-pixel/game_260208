@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Gemini Rhythm Game</title>
+    <style>
+        body { background: #111; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; overflow: hidden; font-family: sans-serif; }
+        canvas { border: 2px solid #555; background: #000; }
+        .info { margin-bottom: 10px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="info">
+    <h2>4-Key Rhythm Game</h2>
+    <p>Keys: [ A ] [ S ] [ D ] [ F ]</p>
+    <button id="startBtn">게임 시작 (음악 필요)</button>
+</div>
+<canvas id="gameCanvas"></canvas>
+
+<script>
+/**
+ * 리듬게임 기본 엔진
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const startBtn = document.getElementById('startBtn');
+
+canvas.width = 400;
+canvas.height = 600;
+
+const KEYS = ['a', 's', 'd', 'f'];
+const COLUMN_WIDTH = canvas.width / 4;
+const NOTE_SPEED = 5; // 속도 조절 가능
+const JUDGMENT_LINE_Y = 520;
+
+let notes = []; // MIDI 분석 후 여기에 데이터가 들어갈 예정입니다.
+let score = 0;
+let startTime = 0;
+let isPlaying = false;
+
+// 샘플 데이터 구조 (나중에 MIDI 파싱 데이터로 대체)
+// { time: 초, lane: 0~3 }
+const sampleNotes = [
+    { time: 1.0, lane: 0 }, { time: 1.5, lane: 1 },
+    { time: 2.0, lane: 2 }, { time: 2.5, lane: 3 }
+];
+
+// 키 입력 상태
+const keyState = { a: false, s: false, d: false, f: false };
+
+window.addEventListener('keydown', (e) => {
+    const key = e.key.toLowerCase();
+    if (KEYS.includes(key)) {
+        keyState[key] = true;
+        checkHit(KEYS.indexOf(key));
+    }
+});
+
+window.addEventListener('keyup', (e) => {
+    const key = e.key.toLowerCase();
+    if (KEYS.includes(key)) keyState[key] = false;
+});
+
+function checkHit(lane) {
+    const currentTime = (performance.now() - startTime) / 1000;
+    for (let i = 0; i < notes.length; i++) {
+        const note = notes[i];
+        if (note.lane === lane && !note.hit) {
+            const diff = Math.abs(currentTime - note.time);
+            if (diff < 0.15) { // 판정 범위 (0.15초)
+                note.hit = true;
+                score += 100;
+                break;
+            }
+        }
+    }
+}
+
+function update() {
+    if (!isPlaying) return;
+    
+    const currentTime = (performance.now() - startTime) / 1000;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 레인 그리기
+    for (let i = 0; i < 4; i++) {
+        ctx.strokeStyle = '#333';
+        ctx.strokeRect(i * COLUMN_WIDTH, 0, COLUMN_WIDTH, canvas.height);
+        
+        // 키 눌림 효과
+        if (keyState[KEYS[i]]) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.fillRect(i * COLUMN_WIDTH, 0, COLUMN_WIDTH, canvas.height);
+        }
+    }
+
+    // 판정선
+    ctx.strokeStyle = '#00ff00';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, JUDGMENT_LINE_Y);
+    ctx.lineTo(canvas.width, JUDGMENT_LINE_Y);
+    ctx.stroke();
+
+    // 노트 그리기
+    notes.forEach(note => {
+        if (!note.hit) {
+            // 현재 시간과 노트 시간의 차이를 이용해 Y 위치 계산
+            const relativeTime = note.time - currentTime;
+            const y = JUDGMENT_LINE_Y - (relativeTime * NOTE_SPEED * 100);
+
+            if (y > 0 && y < canvas.height) {
+                ctx.fillStyle = '#00f2ff';
+                ctx.fillRect(note.lane * COLUMN_WIDTH + 5, y - 10, COLUMN_WIDTH - 10, 20);
+            }
+            
+            // 화면 아래로 지나간 노트 미스 처리
+            if (y > canvas.height + 20) note.hit = true; 
+        }
+    });
+
+    // 점수 표시
+    ctx.fillStyle = 'white';
+    ctx.font = '20px Arial';
+    ctx.fillText(`Score: ${score}`, 10, 30);
+
+    requestAnimationFrame(update);
+}
+
+startBtn.addEventListener('click', () => {
+    notes = JSON.parse(JSON.stringify(sampleNotes)); // 복사본 사용
+    score = 0;
+    startTime = performance.now();
+    isPlaying = true;
+    update();
+    startBtn.innerText = "게임 재시작";
+});
+
+</script>
+</body>
+</html>
