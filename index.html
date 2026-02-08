@@ -2,7 +2,8 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Cyber Rhythm - Sound Integrated</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyber Rhythm - Final Version</title>
     <style>
         body { 
             background: radial-gradient(circle, #001233 0%, #000000 100%); 
@@ -14,13 +15,15 @@
             box-shadow: 0 0 50px rgba(0, 242, 255, 0.2); 
             border-left: 1px solid rgba(255,255,255,0.1);
             border-right: 1px solid rgba(255,255,255,0.1);
+            background: #000;
         }
         button {
-            position: absolute; padding: 15px 40px; font-size: 20px; background: transparent; 
+            position: absolute; padding: 15px 40px; font-size: 20px; background: rgba(0,0,0,0.8); 
             color: #00f2ff; border: 2px solid #00f2ff; cursor: pointer; z-index: 20;
             transition: 0.3s; text-transform: uppercase; letter-spacing: 3px; font-weight: bold;
         }
         button:hover { background: #00f2ff; color: black; box-shadow: 0 0 30px #00f2ff; }
+        button:disabled { border-color: #555; color: #555; cursor: wait; }
     </style>
 </head>
 <body>
@@ -29,10 +32,13 @@
     <h1 style="margin:0; letter-spacing: 5px; color: #00f2ff; text-shadow: 0 0 10px #00f2ff;">VELOCITY PLAY</h1>
     <p id="scoreText" style="font-size: 24px; margin: 5px 0;">SCORE: 000000</p>
 </div>
-<button id="startBtn">START MUSIC MISSION</button>
+<button id="startBtn">LOADING MUSIC...</button>
 <canvas id="gameCanvas"></canvas>
 
 <script>
+/**
+ * [전체 코드] - 리듬게임 엔진 & 오디오 통합본
+ */
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const startBtn = document.getElementById('startBtn');
@@ -41,6 +47,7 @@ const scoreText = document.getElementById('scoreText');
 canvas.width = 500;
 canvas.height = 700;
 
+// 설정값
 const KEYS = ['a', 's', 'd', 'f'];
 const COLORS = ['#FF007A', '#00f2ff', '#00f2ff', '#FFFFFF'];
 const COLUMN_WIDTH = canvas.width / 4;
@@ -54,9 +61,24 @@ let isPlaying = false;
 let lastJudgement = "";
 let judgementColor = "#fff";
 let judgementOpacity = 0;
-let gameAudio = null; // 오디오 객체 변수
 
-// MIDI 기반 데이터 (사용자 제공 MIDI 분석 결과)
+// 오디오 초기화
+const gameAudio = new Audio('music.mp3');
+startBtn.disabled = true;
+
+// 음악 파일 로드 확인
+gameAudio.addEventListener('canplaythrough', () => {
+    startBtn.disabled = false;
+    startBtn.innerText = "START MISSION";
+    console.log("Music is ready!");
+});
+
+gameAudio.addEventListener('error', () => {
+    startBtn.innerText = "FILE NOT FOUND";
+    console.error("music.mp3 파일을 찾을 수 없습니다.");
+});
+
+// MIDI 기반 노트 데이터 (사용자 제공)
 const midiData = [
     { time: 0.50, lane: 0 }, { time: 0.75, lane: 2 }, { time: 1.10, lane: 1 }, { time: 1.40, lane: 3 },
     { time: 1.80, lane: 0 }, { time: 2.10, lane: 2 }, { time: 2.30, lane: 1 }, { time: 2.55, lane: 3 },
@@ -67,6 +89,7 @@ const midiData = [
 
 const keyState = { a: false, s: false, d: false, f: false };
 
+// 입력 처리
 window.addEventListener('keydown', (e) => {
     const key = e.key.toLowerCase();
     if (KEYS.includes(key)) {
@@ -113,12 +136,13 @@ function updateScore() {
 function drawGame() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // 배경 그리드
+    // 그리드
     ctx.strokeStyle = 'rgba(0, 242, 255, 0.05)';
     for(let i=0; i<=4; i++) {
         ctx.beginPath(); ctx.moveTo(i * COLUMN_WIDTH, 0); ctx.lineTo(i * COLUMN_WIDTH, canvas.height); ctx.stroke();
     }
 
+    // 판정 텍스트
     if (judgementOpacity > 0) {
         ctx.save();
         ctx.globalAlpha = judgementOpacity;
@@ -131,6 +155,7 @@ function drawGame() {
         judgementOpacity -= 0.03;
     }
 
+    // 판정 라인
     for(let i=0; i<4; i++) {
         const x = i * COLUMN_WIDTH + COLUMN_WIDTH / 2;
         ctx.strokeStyle = keyState[KEYS[i]] ? COLORS[i] : 'rgba(255,255,255,0.2)';
@@ -154,8 +179,7 @@ function update() {
             const y = JUDGMENT_LINE_Y - (relativeTime * NOTE_SPEED);
 
             if (y > -50 && y < canvas.height + 50) {
-                ctx.shadowBlur = 20;
-                ctx.shadowColor = COLORS[note.lane];
+                ctx.shadowBlur = 20; ctx.shadowColor = COLORS[note.lane];
                 ctx.fillStyle = COLORS[note.lane];
                 ctx.fillRect(note.lane * COLUMN_WIDTH + 15, y - 8, COLUMN_WIDTH - 30, 16);
                 ctx.shadowBlur = 0;
@@ -171,24 +195,20 @@ function update() {
     requestAnimationFrame(update);
 }
 
-// 시작 버튼 클릭 시 실행되는 부분
 startBtn.addEventListener('click', () => {
-    // 1. 오디오 재생 로직 추가
-    if (gameAudio) {
-        gameAudio.pause();
-        gameAudio.currentTime = 0;
-    }
-    gameAudio = new Audio('music.mp3'); // 같은 폴더 내 music.mp3 불러오기
-    gameAudio.play().catch(e => console.error("오디오 재생 실패:", e));
-
-    // 2. 게임 상태 초기화
-    notes = midiData.map(n => ({ ...n, hit: false }));
-    score = 0;
-    updateScore();
-    startTime = performance.now();
-    isPlaying = true;
-    startBtn.style.display = 'none';
-    update();
+    // 오디오 재생 시도
+    gameAudio.play().then(() => {
+        notes = midiData.map(n => ({ ...n, hit: false }));
+        score = 0;
+        updateScore();
+        startTime = performance.now();
+        isPlaying = true;
+        startBtn.style.display = 'none';
+        update();
+    }).catch(e => {
+        alert("재생 오류: music.mp3 파일이 같은 폴더에 있는지 확인하세요.");
+        console.error(e);
+    });
 });
 </script>
 </body>
