@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Cyber Rhythm - MIDI Integrated</title>
+    <title>Cyber Rhythm - Sound Integrated</title>
     <style>
         body { 
             background: radial-gradient(circle, #001233 0%, #000000 100%); 
@@ -54,10 +54,9 @@ let isPlaying = false;
 let lastJudgement = "";
 let judgementColor = "#fff";
 let judgementOpacity = 0;
+let gameAudio = null; // 오디오 객체 변수
 
-/**
- * 전송해주신 MIDI 파일(두바이 쫀득쿠키)에서 추출한 멜로디 기반 데이터
- */
+// MIDI 기반 데이터 (사용자 제공 MIDI 분석 결과)
 const midiData = [
     { time: 0.50, lane: 0 }, { time: 0.75, lane: 2 }, { time: 1.10, lane: 1 }, { time: 1.40, lane: 3 },
     { time: 1.80, lane: 0 }, { time: 2.10, lane: 2 }, { time: 2.30, lane: 1 }, { time: 2.55, lane: 3 },
@@ -88,7 +87,6 @@ function checkHit(lane) {
     for (let note of notes) {
         if (note.lane === lane && !note.hit) {
             const diff = Math.abs(currentTime - note.time);
-            
             if (diff < 0.20) {
                 note.hit = true;
                 if (diff < 0.06) { showJudgement("PERFECT", "#00f2ff"); score += 1000; }
@@ -121,7 +119,6 @@ function drawGame() {
         ctx.beginPath(); ctx.moveTo(i * COLUMN_WIDTH, 0); ctx.lineTo(i * COLUMN_WIDTH, canvas.height); ctx.stroke();
     }
 
-    // 판정 UI (원형 & 텍스트)
     if (judgementOpacity > 0) {
         ctx.save();
         ctx.globalAlpha = judgementOpacity;
@@ -174,7 +171,17 @@ function update() {
     requestAnimationFrame(update);
 }
 
+// 시작 버튼 클릭 시 실행되는 부분
 startBtn.addEventListener('click', () => {
+    // 1. 오디오 재생 로직 추가
+    if (gameAudio) {
+        gameAudio.pause();
+        gameAudio.currentTime = 0;
+    }
+    gameAudio = new Audio('music.mp3'); // 같은 폴더 내 music.mp3 불러오기
+    gameAudio.play().catch(e => console.error("오디오 재생 실패:", e));
+
+    // 2. 게임 상태 초기화
     notes = midiData.map(n => ({ ...n, hit: false }));
     score = 0;
     updateScore();
