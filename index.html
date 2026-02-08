@@ -2,94 +2,97 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cyber Rhythm - Final Version</title>
+    <title>Dubai Cookie - Sound Fix Version</title>
     <style>
         body { 
-            background: radial-gradient(circle, #001233 0%, #000000 100%); 
+            background: radial-gradient(circle, #2c1e12 0%, #000000 100%); 
             color: white; display: flex; flex-direction: column; align-items: center; 
             justify-content: center; height: 100vh; margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; 
         }
         #ui-container { position: absolute; top: 20px; text-align: center; z-index: 10; pointer-events: none; }
         canvas { 
-            box-shadow: 0 0 50px rgba(0, 242, 255, 0.2); 
-            border-left: 1px solid rgba(255,255,255,0.1);
-            border-right: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 0 50px rgba(255, 184, 0, 0.2); 
+            border-left: 2px solid rgba(255, 215, 0, 0.1);
+            border-right: 2px solid rgba(255, 215, 0, 0.1);
             background: #000;
         }
+        .control-panel { position: absolute; z-index: 20; text-align: center; background: rgba(0,0,0,0.8); padding: 30px; border-radius: 20px; border: 2px solid #ffd700; }
         button {
-            position: absolute; padding: 15px 40px; font-size: 20px; background: rgba(0,0,0,0.8); 
-            color: #00f2ff; border: 2px solid #00f2ff; cursor: pointer; z-index: 20;
-            transition: 0.3s; text-transform: uppercase; letter-spacing: 3px; font-weight: bold;
+            padding: 15px 40px; font-size: 20px; background: #8b4513; 
+            color: #ffd700; border: 2px solid #ffd700; cursor: pointer;
+            transition: 0.3s; text-transform: uppercase; letter-spacing: 2px; font-weight: bold; margin-top: 10px;
         }
-        button:hover { background: #00f2ff; color: black; box-shadow: 0 0 30px #00f2ff; }
-        button:disabled { border-color: #555; color: #555; cursor: wait; }
+        button:hover { background: #ffd700; color: black; box-shadow: 0 0 30px #ffd700; }
+        #status { margin-bottom: 15px; color: #ffd700; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div id="ui-container">
-    <h1 style="margin:0; letter-spacing: 5px; color: #00f2ff; text-shadow: 0 0 10px #00f2ff;">VELOCITY PLAY</h1>
+    <h1 style="margin:0; letter-spacing: 3px; color: #ffd700; text-shadow: 0 0 10px #8b4513;">DUBAI COOKIE RHYTHM</h1>
     <p id="scoreText" style="font-size: 24px; margin: 5px 0;">SCORE: 000000</p>
+    <p id="comboText" style="font-size: 18px; color: #ff007a;">COMBO: 0</p>
 </div>
-<button id="startBtn">LOADING MUSIC...</button>
+
+<div class="control-panel" id="startMenu">
+    <div id="status">음악을 불러오는 중...</div>
+    <button id="startBtn" style="display:none;">START MISSION</button>
+    <p style="font-size: 12px; color: #aaa; margin-top: 10px;">(주의: music.mp3 파일이 같은 폴더에 있어야 합니다)</p>
+</div>
+
 <canvas id="gameCanvas"></canvas>
 
+<audio id="bgm" src="music.mp3" preload="auto"></audio>
+
 <script>
-/**
- * [전체 코드] - 리듬게임 엔진 & 오디오 통합본
- */
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const startBtn = document.getElementById('startBtn');
+const startMenu = document.getElementById('startMenu');
+const statusText = document.getElementById('status');
+const bgm = document.getElementById('bgm');
 const scoreText = document.getElementById('scoreText');
+const comboText = document.getElementById('comboText');
 
 canvas.width = 500;
 canvas.height = 700;
 
-// 설정값
+// 설정 및 데이터
 const KEYS = ['a', 's', 'd', 'f'];
-const COLORS = ['#FF007A', '#00f2ff', '#00f2ff', '#FFFFFF'];
+const COLORS = ['#ff007a', '#ffd700', '#ffd700', '#ffffff'];
 const COLUMN_WIDTH = canvas.width / 4;
 const JUDGMENT_LINE_Y = 600;
-const NOTE_SPEED = 600;
+const NOTE_SPEED = 650; 
 
 let notes = [];
 let score = 0;
+let combo = 0;
 let startTime = 0;
 let isPlaying = false;
 let lastJudgement = "";
 let judgementColor = "#fff";
 let judgementOpacity = 0;
 
-// 오디오 초기화
-const gameAudio = new Audio('music.mp3');
-startBtn.disabled = true;
-
-// 음악 파일 로드 확인
-gameAudio.addEventListener('canplaythrough', () => {
-    startBtn.disabled = false;
-    startBtn.innerText = "START MISSION";
-    console.log("Music is ready!");
-});
-
-gameAudio.addEventListener('error', () => {
-    startBtn.innerText = "FILE NOT FOUND";
-    console.error("music.mp3 파일을 찾을 수 없습니다.");
-});
-
-// MIDI 기반 노트 데이터 (사용자 제공)
-const midiData = [
-    { time: 0.50, lane: 0 }, { time: 0.75, lane: 2 }, { time: 1.10, lane: 1 }, { time: 1.40, lane: 3 },
-    { time: 1.80, lane: 0 }, { time: 2.10, lane: 2 }, { time: 2.30, lane: 1 }, { time: 2.55, lane: 3 },
-    { time: 3.00, lane: 0 }, { time: 3.25, lane: 1 }, { time: 3.50, lane: 2 }, { time: 3.80, lane: 0 },
-    { time: 4.20, lane: 3 }, { time: 4.50, lane: 1 }, { time: 4.85, lane: 2 }, { time: 5.20, lane: 0 },
-    { time: 5.60, lane: 3 }, { time: 6.00, lane: 1 }, { time: 6.30, lane: 2 }, { time: 6.70, lane: 0 }
+[cite_start]// MIDI 기반 채보 데이터 [cite: 1]
+const dubaiNotes = [
+    { time: 0.5, lane: 0 }, { time: 0.8, lane: 2 }, { time: 1.1, lane: 1 }, { time: 1.4, lane: 3 },
+    { time: 1.8, lane: 0 }, { time: 2.1, lane: 2 }, { time: 2.3, lane: 1 }, { time: 2.5, lane: 3 },
+    { time: 3.0, lane: 0 }, { time: 3.2, lane: 1 }, { time: 3.5, lane: 2 }, { time: 3.8, lane: 0 }
 ];
+
+// 음악 로드 체크
+bgm.oncanplaythrough = () => {
+    statusText.innerText = "음악 준비 완료!";
+    startBtn.style.display = "inline-block";
+};
+
+bgm.onerror = () => {
+    statusText.innerText = "파일(music.mp3)을 찾을 수 없습니다.";
+    statusText.style.color = "red";
+};
 
 const keyState = { a: false, s: false, d: false, f: false };
 
-// 입력 처리
 window.addEventListener('keydown', (e) => {
     const key = e.key.toLowerCase();
     if (KEYS.includes(key)) {
@@ -106,17 +109,15 @@ window.addEventListener('keyup', (e) => {
 function checkHit(lane) {
     if (!isPlaying) return;
     const currentTime = (performance.now() - startTime) / 1000;
-    
     for (let note of notes) {
         if (note.lane === lane && !note.hit) {
             const diff = Math.abs(currentTime - note.time);
             if (diff < 0.20) {
                 note.hit = true;
-                if (diff < 0.06) { showJudgement("PERFECT", "#00f2ff"); score += 1000; }
-                else if (diff < 0.11) { showJudgement("GREAT", "#00ff00"); score += 700; }
-                else if (diff < 0.16) { showJudgement("GOOD", "#ffff00"); score += 400; }
-                else { showJudgement("BAD", "#ff0000"); score += 100; }
-                updateScore();
+                if (diff < 0.07) { showJudgement("PERFECT", "#ffd700"); score += 1000; combo++; }
+                else if (diff < 0.12) { showJudgement("GREAT", "#00ff00"); score += 700; combo++; }
+                else { showJudgement("GOOD", "#ffff00"); score += 400; combo++; }
+                updateUI();
                 break;
             }
         }
@@ -129,20 +130,23 @@ function showJudgement(text, color) {
     judgementOpacity = 1.0;
 }
 
-function updateScore() {
+function updateUI() {
     scoreText.innerText = `SCORE: ${score.toString().padStart(6, '0')}`;
+    comboText.innerText = `COMBO: ${combo}`;
 }
 
-function drawGame() {
+function update() {
+    if (!isPlaying) return;
+    const currentTime = (performance.now() - startTime) / 1000;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // 그리드
-    ctx.strokeStyle = 'rgba(0, 242, 255, 0.05)';
+    // 배경선
+    ctx.strokeStyle = 'rgba(255, 215, 0, 0.1)';
     for(let i=0; i<=4; i++) {
         ctx.beginPath(); ctx.moveTo(i * COLUMN_WIDTH, 0); ctx.lineTo(i * COLUMN_WIDTH, canvas.height); ctx.stroke();
     }
 
-    // 판정 텍스트
+    // 판정 효과
     if (judgementOpacity > 0) {
         ctx.save();
         ctx.globalAlpha = judgementOpacity;
@@ -151,43 +155,32 @@ function drawGame() {
         ctx.textAlign = "center";
         ctx.shadowBlur = 20; ctx.shadowColor = judgementColor;
         ctx.fillText(lastJudgement, canvas.width / 2, 350);
+        ctx.fillText(`${combo} COMBO`, canvas.width / 2, 410);
         ctx.restore();
         judgementOpacity -= 0.03;
     }
 
-    // 판정 라인
+    // 판정선 구멍
     for(let i=0; i<4; i++) {
         const x = i * COLUMN_WIDTH + COLUMN_WIDTH / 2;
         ctx.strokeStyle = keyState[KEYS[i]] ? COLORS[i] : 'rgba(255,255,255,0.2)';
         ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(x, JUDGMENT_LINE_Y, 40, 0, Math.PI * 2); ctx.stroke();
-        if(keyState[KEYS[i]]) {
-            ctx.fillStyle = COLORS[i] + '66'; ctx.fill();
-        }
     }
-}
 
-function update() {
-    if (!isPlaying) return;
-    const currentTime = (performance.now() - startTime) / 1000;
-
-    drawGame();
-
+    // 노트 이동
     notes.forEach(note => {
         if (!note.hit) {
             const relativeTime = note.time - currentTime;
             const y = JUDGMENT_LINE_Y - (relativeTime * NOTE_SPEED);
-
             if (y > -50 && y < canvas.height + 50) {
-                ctx.shadowBlur = 20; ctx.shadowColor = COLORS[note.lane];
                 ctx.fillStyle = COLORS[note.lane];
-                ctx.fillRect(note.lane * COLUMN_WIDTH + 15, y - 8, COLUMN_WIDTH - 30, 16);
-                ctx.shadowBlur = 0;
+                ctx.fillRect(note.lane * COLUMN_WIDTH + 15, y - 10, COLUMN_WIDTH - 30, 20);
             }
-            
             if (y > JUDGMENT_LINE_Y + 100) {
-                note.hit = true;
+                note.hit = true; combo = 0;
                 showJudgement("MISS", "#555555");
+                updateUI();
             }
         }
     });
@@ -195,21 +188,19 @@ function update() {
     requestAnimationFrame(update);
 }
 
-startBtn.addEventListener('click', () => {
-    // 오디오 재생 시도
-    gameAudio.play().then(() => {
-        notes = midiData.map(n => ({ ...n, hit: false }));
-        score = 0;
-        updateScore();
+startBtn.onclick = () => {
+    bgm.play().then(() => {
+        notes = dubaiNotes.map(n => ({ ...n, hit: false }));
+        score = 0; combo = 0;
+        updateUI();
         startTime = performance.now();
         isPlaying = true;
-        startBtn.style.display = 'none';
+        startMenu.style.display = 'none';
         update();
     }).catch(e => {
-        alert("재생 오류: music.mp3 파일이 같은 폴더에 있는지 확인하세요.");
-        console.error(e);
+        alert("브라우저에서 음악 재생을 차단했습니다. 화면을 한 번 클릭한 뒤 다시 시작해주세요.");
     });
-});
+};
 </script>
 </body>
 </html>
