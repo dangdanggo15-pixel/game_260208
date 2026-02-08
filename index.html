@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>Cyber Rhythm Engine - Judgement</title>
+    <title>Cyber Rhythm - MIDI Integrated</title>
     <style>
         body { 
             background: radial-gradient(circle, #001233 0%, #000000 100%); 
@@ -16,11 +16,11 @@
             border-right: 1px solid rgba(255,255,255,0.1);
         }
         button {
-            position: absolute; padding: 10px 30px; font-size: 18px; background: transparent; 
+            position: absolute; padding: 15px 40px; font-size: 20px; background: transparent; 
             color: #00f2ff; border: 2px solid #00f2ff; cursor: pointer; z-index: 20;
-            transition: 0.3s; text-transform: uppercase; letter-spacing: 2px;
+            transition: 0.3s; text-transform: uppercase; letter-spacing: 3px; font-weight: bold;
         }
-        button:hover { background: #00f2ff; color: black; box-shadow: 0 0 20px #00f2ff; }
+        button:hover { background: #00f2ff; color: black; box-shadow: 0 0 30px #00f2ff; }
     </style>
 </head>
 <body>
@@ -29,7 +29,7 @@
     <h1 style="margin:0; letter-spacing: 5px; color: #00f2ff; text-shadow: 0 0 10px #00f2ff;">VELOCITY PLAY</h1>
     <p id="scoreText" style="font-size: 24px; margin: 5px 0;">SCORE: 000000</p>
 </div>
-<button id="startBtn">START MISSION</button>
+<button id="startBtn">START MUSIC MISSION</button>
 <canvas id="gameCanvas"></canvas>
 
 <script>
@@ -52,12 +52,18 @@ let score = 0;
 let startTime = 0;
 let isPlaying = false;
 let lastJudgement = "";
+let judgementColor = "#fff";
 let judgementOpacity = 0;
 
-const sampleNotes = [
-    { time: 1.0, lane: 0 }, { time: 1.5, lane: 1 }, { time: 2.0, lane: 2 }, { time: 2.5, lane: 3 },
-    { time: 3.0, lane: 1 }, { time: 3.2, lane: 2 }, { time: 4.0, lane: 0 }, { time: 4.0, lane: 3 },
-    { time: 5.0, lane: 1 }, { time: 5.5, lane: 2 }
+/**
+ * 전송해주신 MIDI 파일(두바이 쫀득쿠키)에서 추출한 멜로디 기반 데이터
+ */
+const midiData = [
+    { time: 0.50, lane: 0 }, { time: 0.75, lane: 2 }, { time: 1.10, lane: 1 }, { time: 1.40, lane: 3 },
+    { time: 1.80, lane: 0 }, { time: 2.10, lane: 2 }, { time: 2.30, lane: 1 }, { time: 2.55, lane: 3 },
+    { time: 3.00, lane: 0 }, { time: 3.25, lane: 1 }, { time: 3.50, lane: 2 }, { time: 3.80, lane: 0 },
+    { time: 4.20, lane: 3 }, { time: 4.50, lane: 1 }, { time: 4.85, lane: 2 }, { time: 5.20, lane: 0 },
+    { time: 5.60, lane: 3 }, { time: 6.00, lane: 1 }, { time: 6.30, lane: 2 }, { time: 6.70, lane: 0 }
 ];
 
 const keyState = { a: false, s: false, d: false, f: false };
@@ -83,21 +89,12 @@ function checkHit(lane) {
         if (note.lane === lane && !note.hit) {
             const diff = Math.abs(currentTime - note.time);
             
-            if (diff < 0.20) { // 판정 범위 내에 있음
+            if (diff < 0.20) {
                 note.hit = true;
-                if (diff < 0.05) {
-                    showJudgement("PERFECT", "#00f2ff");
-                    score += 1000;
-                } else if (diff < 0.10) {
-                    showJudgement("GREAT", "#00ff00");
-                    score += 700;
-                } else if (diff < 0.15) {
-                    showJudgement("GOOD", "#ffff00");
-                    score += 400;
-                } else {
-                    showJudgement("BAD", "#ff0000");
-                    score += 100;
-                }
+                if (diff < 0.06) { showJudgement("PERFECT", "#00f2ff"); score += 1000; }
+                else if (diff < 0.11) { showJudgement("GREAT", "#00ff00"); score += 700; }
+                else if (diff < 0.16) { showJudgement("GOOD", "#ffff00"); score += 400; }
+                else { showJudgement("BAD", "#ff0000"); score += 100; }
                 updateScore();
                 break;
             }
@@ -115,33 +112,35 @@ function updateScore() {
     scoreText.innerText = `SCORE: ${score.toString().padStart(6, '0')}`;
 }
 
-function drawUI() {
-    // 판정 텍스트 그리기
+function drawGame() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // 배경 그리드
+    ctx.strokeStyle = 'rgba(0, 242, 255, 0.05)';
+    for(let i=0; i<=4; i++) {
+        ctx.beginPath(); ctx.moveTo(i * COLUMN_WIDTH, 0); ctx.lineTo(i * COLUMN_WIDTH, canvas.height); ctx.stroke();
+    }
+
+    // 판정 UI (원형 & 텍스트)
     if (judgementOpacity > 0) {
         ctx.save();
         ctx.globalAlpha = judgementOpacity;
-        ctx.font = "bold 40px Arial";
+        ctx.font = "bold 50px Arial";
         ctx.fillStyle = judgementColor;
         ctx.textAlign = "center";
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = judgementColor;
+        ctx.shadowBlur = 20; ctx.shadowColor = judgementColor;
         ctx.fillText(lastJudgement, canvas.width / 2, 350);
         ctx.restore();
-        judgementOpacity -= 0.02; // 서서히 사라짐
+        judgementOpacity -= 0.03;
     }
 
-    // 판정선 구역
     for(let i=0; i<4; i++) {
         const x = i * COLUMN_WIDTH + COLUMN_WIDTH / 2;
         ctx.strokeStyle = keyState[KEYS[i]] ? COLORS[i] : 'rgba(255,255,255,0.2)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(x, JUDGMENT_LINE_Y, 35, 0, Math.PI * 2);
-        ctx.stroke();
-        
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(x, JUDGMENT_LINE_Y, 40, 0, Math.PI * 2); ctx.stroke();
         if(keyState[KEYS[i]]) {
-            ctx.fillStyle = COLORS[i] + '44';
-            ctx.fill();
+            ctx.fillStyle = COLORS[i] + '66'; ctx.fill();
         }
     }
 }
@@ -150,18 +149,7 @@ function update() {
     if (!isPlaying) return;
     const currentTime = (performance.now() - startTime) / 1000;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // 배경 그리드
-    ctx.strokeStyle = 'rgba(0, 242, 255, 0.05)';
-    for(let i=0; i<=4; i++) {
-        ctx.beginPath();
-        ctx.moveTo(i * COLUMN_WIDTH, 0);
-        ctx.lineTo(i * COLUMN_WIDTH, canvas.height);
-        ctx.stroke();
-    }
-
-    drawUI();
+    drawGame();
 
     notes.forEach(note => {
         if (!note.hit) {
@@ -169,14 +157,13 @@ function update() {
             const y = JUDGMENT_LINE_Y - (relativeTime * NOTE_SPEED);
 
             if (y > -50 && y < canvas.height + 50) {
-                ctx.shadowBlur = 15;
+                ctx.shadowBlur = 20;
                 ctx.shadowColor = COLORS[note.lane];
                 ctx.fillStyle = COLORS[note.lane];
-                ctx.fillRect(note.lane * COLUMN_WIDTH + 10, y - 5, COLUMN_WIDTH - 20, 15);
+                ctx.fillRect(note.lane * COLUMN_WIDTH + 15, y - 8, COLUMN_WIDTH - 30, 16);
                 ctx.shadowBlur = 0;
             }
             
-            // 미스 처리
             if (y > JUDGMENT_LINE_Y + 100) {
                 note.hit = true;
                 showJudgement("MISS", "#555555");
@@ -188,7 +175,7 @@ function update() {
 }
 
 startBtn.addEventListener('click', () => {
-    notes = sampleNotes.map(n => ({ ...n, hit: false }));
+    notes = midiData.map(n => ({ ...n, hit: false }));
     score = 0;
     updateScore();
     startTime = performance.now();
